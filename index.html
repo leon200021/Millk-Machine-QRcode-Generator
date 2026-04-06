@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牛奶機協定 QR 產生器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .tab-active {
+            border-bottom: 3px solid #3b82f6;
+            color: #1d4ed8;
+        }
+        
+        #qrcode img {
+            margin: 0 auto;
+            border: 12px solid white;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen py-6 px-4 sm:py-12">
+    <div class="max-w-lg mx-auto">
+        <!-- Header -->
+        <div class="flex items-center gap-4 mb-8">
+            <div class="p-3 bg-blue-600 text-white rounded-2xl shadow-lg">
+                <i data-lucide="qr-code" class="w-8 h-8"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">牛奶機指令產生器</h1>
+                <p class="text-gray-500 text-sm">協定版本：Q1 (v1.0)</p>
+            </div>
+        </div>
+
+        <!-- Settings Card -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+            <!-- Mode Switcher -->
+            <div class="flex border-b border-gray-100">
+                <button onclick="setMode('DOSE')" id="tab-DOSE" class="flex-1 py-4 text-center font-bold text-gray-400 transition-all tab-active">
+                    單管出料 (DOSE)
+                </button>
+                <button onclick="setMode('DOSE4')" id="tab-DOSE4" class="flex-1 py-4 text-center font-bold text-gray-400 transition-all">
+                    四管出料 (DOSE4)
+                </button>
+            </div>
+
+            <div class="p-6">
+                <!-- Common: Device ID -->
+                <div class="mb-6">
+                    <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                        設備 ID (DST)
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <!-- Updated default value to 00 -->
+                        <input type="text" id="dstId" value="00" maxlength="2" 
+                               class="w-24 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none text-center font-bold mono"
+                               oninput="this.value = this.value.toUpperCase().replace(/[^0-9A-F]/g, ''); generateQR();">
+                        <span class="text-sm text-gray-400 font-medium">16 進位 (00: 廣播, 01+: 特定機器)</span>
+                    </div>
+                </div>
+
+                <!-- Mode: DOSE (Single) -->
+                <div id="panel-DOSE" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-3">選擇管柱 (CH)</label>
+                        <div class="grid grid-cols-4 gap-3">
+                            <button onclick="setChannel(1)" id="ch-1" class="ch-btn py-3 rounded-xl border-2 border-blue-100 bg-blue-50 text-blue-700 font-bold transition-all">1</button>
+                            <button onclick="setChannel(2)" id="ch-2" class="ch-btn py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-gray-500 font-bold transition-all">2</button>
+                            <button onclick="setChannel(3)" id="ch-3" class="ch-btn py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-gray-500 font-bold transition-all">3</button>
+                            <button onclick="setChannel(4)" id="ch-4" class="ch-btn py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-gray-500 font-bold transition-all">4</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">出料量 (VOL_ML)</label>
+                        <div class="relative">
+                            <input type="number" id="singleVol" value="100" step="0.01" min="0" max="9999.99"
+                                   class="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold"
+                                   oninput="generateQR()">
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">ml</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode: DOSE4 (Multi) -->
+                <div id="panel-DOSE4" class="hidden grid grid-cols-2 gap-4">
+                    <div class="col-span-2 text-sm text-gray-500 mb-2 flex items-center gap-1">
+                        <i data-lucide="info" class="w-4 h-4 text-blue-500"></i>
+                        輸入四管各自的出料量
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 mb-1">管柱 1 (ml)</label>
+                        <input type="number" id="v1" value="0" step="0.1" class="v4-input w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold" oninput="generateQR()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 mb-1">管柱 2 (ml)</label>
+                        <input type="number" id="v2" value="0" step="0.1" class="v4-input w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold" oninput="generateQR()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 mb-1">管柱 3 (ml)</label>
+                        <input type="number" id="v3" value="0" step="0.1" class="v4-input w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold" oninput="generateQR()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 mb-1">管柱 4 (ml)</label>
+                        <input type="number" id="v4" value="0" step="0.1" class="v4-input w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold" oninput="generateQR()">
+                    </div>
+                </div>
+
+                <button onclick="generateQR()" class="w-full mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                    產生指令 QR Code
+                </button>
+            </div>
+        </div>
+
+        <!-- Result Card -->
+        <div id="resultArea" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 text-center">
+                <div id="qrcode" class="flex justify-center mb-6"></div>
+                
+                <div class="bg-gray-900 rounded-2xl p-5 mb-6 text-left relative group">
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">協定字串 (含 CRC)</p>
+                    <div id="rawString" class="text-blue-400 font-bold mono break-all text-sm leading-relaxed"></div>
+                    <button onclick="copyToClipboard()" class="absolute top-4 right-4 p-2 bg-gray-800 text-gray-400 rounded-lg hover:text-white transition-colors">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="downloadQR()" class="flex items-center justify-center gap-2 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        儲存圖片
+                    </button>
+                    <div class="flex items-center justify-center gap-2 py-3 px-4 bg-green-50 text-green-700 rounded-xl font-bold">
+                        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                        CRC 有效
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full text-sm font-medium shadow-2xl z-50 hidden animate-in fade-in slide-in-from-bottom-4"></div>
+
+    <script>
+        let currentMode = 'DOSE';
+        let currentCH = 1;
+        let qrcode = null;
+
+        window.onload = () => {
+            lucide.createIcons();
+            generateQR();
+        };
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.remove('tab-active', 'text-gray-800'));
+            document.getElementById(`tab-${mode}`).classList.add('tab-active', 'text-gray-800');
+            
+            if (mode === 'DOSE') {
+                document.getElementById('panel-DOSE').classList.remove('hidden');
+                document.getElementById('panel-DOSE4').classList.add('hidden');
+            } else {
+                document.getElementById('panel-DOSE').classList.add('hidden');
+                document.getElementById('panel-DOSE4').classList.remove('hidden');
+            }
+            generateQR();
+        }
+
+        function setChannel(ch) {
+            currentCH = ch;
+            document.querySelectorAll('.ch-btn').forEach(btn => {
+                btn.classList.remove('border-blue-100', 'bg-blue-50', 'text-blue-700');
+                btn.classList.add('border-gray-100', 'bg-gray-50', 'text-gray-500');
+            });
+            const activeBtn = document.getElementById(`ch-${ch}`);
+            activeBtn.classList.remove('border-gray-100', 'bg-gray-50', 'text-gray-500');
+            activeBtn.classList.add('border-blue-100', 'bg-blue-50', 'text-blue-700');
+            generateQR();
+        }
+
+        function calculateCRC(input) {
+            let sum = 0;
+            for (let i = 0; i < input.length; i++) {
+                sum += input.charCodeAt(i);
+            }
+            let crc = sum & 0xFF;
+            return crc.toString(16).toUpperCase().padStart(2, '0');
+        }
+
+        function generateQR() {
+            const dst = document.getElementById('dstId').value.padStart(2, '0') || '00';
+            let data = "";
+            let cmd = currentMode;
+
+            if (currentMode === 'DOSE') {
+                const vol = parseFloat(document.getElementById('singleVol').value) || 0;
+                const volStr = Number(vol.toFixed(2));
+                data = `${currentCH},${volStr}`;
+            } else {
+                const v1 = Number(parseFloat(document.getElementById('v1').value).toFixed(2)) || 0;
+                const v2 = Number(parseFloat(document.getElementById('v2').value).toFixed(2)) || 0;
+                const v3 = Number(parseFloat(document.getElementById('v3').value).toFixed(2)) || 0;
+                const v4 = Number(parseFloat(document.getElementById('v4').value).toFixed(2)) || 0;
+                data = `${v1},${v2},${v3},${v4}`;
+            }
+
+            const preString = `Q1|${dst}|${cmd}|${data}`;
+            const crc = calculateCRC(preString);
+            const finalString = `${preString}|${crc}`;
+
+            document.getElementById('resultArea').classList.remove('hidden');
+            document.getElementById('rawString').innerText = finalString;
+
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = "";
+            new QRCode(qrContainer, {
+                text: finalString,
+                width: 240,
+                height: 240,
+                colorDark : "#111827",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('rawString').innerText;
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            showToast("指令已複製");
+        }
+
+        function downloadQR() {
+            const img = document.querySelector('#qrcode img');
+            if (img) {
+                const link = document.createElement('a');
+                link.download = `CMD_${currentMode}_DST${document.getElementById('dstId').value}.png`;
+                link.href = img.src;
+                link.click();
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-4');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('animate-out', 'fade-out', 'slide-out-to-bottom-4');
+                }, 500);
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
+
